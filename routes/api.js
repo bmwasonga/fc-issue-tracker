@@ -57,7 +57,7 @@ module.exports = function (app) {
 			const issueId = req.body._id;
 
 			if (!issueId) {
-				return res.status(400).json({ error: 'missing _id' });
+				return res.status(400).json({ error: 'missing id' });
 			}
 
 			const issue = issues.find((issue) => issue._id === issueId);
@@ -95,19 +95,30 @@ module.exports = function (app) {
 		})
 
 		.delete(function (req, res) {
+			const issueId = req.body._id;
 			let project = req.params.project;
-			let issueId = req.body._id;
 
+			// First check if _id exists
 			if (!issueId) {
-				return res.status(400).json({ error: 'missing _id' });
+				return res.status(400).json({ error: 'missing id' });
 			}
 
-			let issueIndex = issues.findIndex((issue) => issue._id === issueId);
-			if (issueIndex > -1) {
+			try {
+				let issueIndex = issues.findIndex((issue) => issue._id === issueId);
+
+				if (issueIndex === -1) {
+					return res.status(400).json({ error: 'invalid id', _id: issueId });
+				}
+
+				// Delete the issue
 				issues.splice(issueIndex, 1);
-				res.json({ message: 'successfully deleted', _id: issueId });
-			} else {
-				res.status(400).json({ error: 'could not delete', _id: issueId });
+				return res
+					.status(200)
+					.json({ result: 'successfully deleted', _id: issueId });
+			} catch (err) {
+				return res
+					.status(400)
+					.json({ error: 'could not delete', _id: issueId });
 			}
 		});
 };
