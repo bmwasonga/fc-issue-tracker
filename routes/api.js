@@ -35,7 +35,7 @@ module.exports = function (app) {
 					(field) => !req.body.hasOwnProperty(field) || req.body[field] === ''
 				)
 			) {
-				return res.status(400).json({ error: 'required field(s) missing' });
+				return res.status(404).json({ error: 'required field(s) missing' });
 			}
 
 			let newIssue = {
@@ -54,21 +54,46 @@ module.exports = function (app) {
 		})
 		.put(function (req, res) {
 			let project = req.params.project;
-			let issueId = req.body._id;
-			let issue = issues.find((issue) => issue._id === issueId);
-			if (issue) {
-				issue.issue_title = req.body.issue_title || issue.issue_title;
-				issue.issue_text = req.body.issue_text || issue.issue_text;
-				issue.created_by = req.body.created_by || issue.created_by;
-				issue.assigned_to = req.body.assigned_to || issue.assigned_to;
-				issue.status_text = req.body.status_text || issue.status_text;
-				issue.open = req.body.open !== undefined ? req.body.open : issue.open;
+			const issueId = req.body._id;
 
-				res.json(issue);
-			} else {
-				res.status(400).json({ error: 'Issue not found' });
+			if (!issueId) {
+				return res.status(400).json({ error: 'missing _id' });
 			}
+
+			const issue = issues.find((issue) => issue._id === issueId);
+
+			if (!issue) {
+				return res.status(400).json({ error: 'issue not found' });
+			}
+
+			const updateFields = [
+				'issue_title',
+				'issue_text',
+				'created_by',
+				'assigned_to',
+				'status_text',
+				'open',
+			];
+
+			const fieldsToUpdate = updateFields.filter((field) =>
+				req.body.hasOwnProperty(field)
+			);
+
+			if (!fieldsToUpdate.length) {
+				return res.status(400).json({
+					error: 'no update field(s) sent',
+					_id: issueId,
+				});
+			}
+
+			fieldsToUpdate.forEach((field) => (issue[field] = req.body[field]));
+
+			return res.status(200).json({
+				result: 'successfully updated',
+				_id: issueId,
+			});
 		})
+
 		.delete(function (req, res) {
 			let project = req.params.project;
 			let issueId = req.body._id;
