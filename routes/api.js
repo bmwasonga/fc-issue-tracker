@@ -97,12 +97,17 @@ module.exports = function (app) {
 		.delete(function (req, res) {
 			let project = req.params.project;
 			let issueId = req.body._id;
+
+			if (!issueId) {
+				return res.status(400).json({ error: 'missing _id' });
+			}
+
 			let issueIndex = issues.findIndex((issue) => issue._id === issueId);
 			if (issueIndex > -1) {
 				issues.splice(issueIndex, 1);
-				res.json({ message: 'Deleted issue with _id: ' + issueId });
+				res.json({ message: 'successfully deleted', _id: issueId });
 			} else {
-				res.status(400).json({ error: 'Issue not found' });
+				res.status(400).json({ error: 'could not delete', _id: issueId });
 			}
 		});
 };
