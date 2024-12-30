@@ -28,16 +28,26 @@ module.exports = function (app) {
 		})
 		.post(function (req, res) {
 			let project = req.params.project;
+
+			const requiredFields = ['issue_title', 'issue_text', 'created_by'];
+			if (
+				requiredFields.some(
+					(field) => !req.body.hasOwnProperty(field) || req.body[field] === ''
+				)
+			) {
+				return res.status(400).json({ error: 'required field(s) missing' });
+			}
+
 			let newIssue = {
 				_id: (issues.length + 1).toString(),
-				title: req.body.issue_title,
-				text: req.body.issue_text,
+				issue_title: req.body.issue_title,
+				issue_text: req.body.issue_text,
 				created_on: new Date(),
 				updated_on: new Date(),
 				created_by: req.body.created_by,
-				assigned_to: req.body.assigned_to,
+				assigned_to: req.body.assigned_to || '',
 				open: true,
-				status_text: req.body.status_text,
+				status_text: req.body.status_text || '',
 			};
 			issues.push(newIssue);
 			res.json(newIssue);
@@ -47,12 +57,13 @@ module.exports = function (app) {
 			let issueId = req.body._id;
 			let issue = issues.find((issue) => issue._id === issueId);
 			if (issue) {
-				issue.title = req.body.issue_title || issue.title;
-				issue.text = req.body.issue_text || issue.text;
+				issue.issue_title = req.body.issue_title || issue.issue_title;
+				issue.issue_text = req.body.issue_text || issue.issue_text;
 				issue.created_by = req.body.created_by || issue.created_by;
 				issue.assigned_to = req.body.assigned_to || issue.assigned_to;
 				issue.status_text = req.body.status_text || issue.status_text;
 				issue.open = req.body.open !== undefined ? req.body.open : issue.open;
+
 				res.json(issue);
 			} else {
 				res.status(400).json({ error: 'Issue not found' });
