@@ -5,7 +5,7 @@ let issues = [];
 module.exports = function (app) {
 	app
 		.route('/api/issues/:project')
-		.get(function (req, res) {
+		.get(async function (req, res) {
 			let project = req.params.project;
 			let query = req.query;
 			let filteredIssues = issues;
