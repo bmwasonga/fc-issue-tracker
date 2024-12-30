@@ -256,7 +256,6 @@ suite('Functional Tests', function () {
 	});
 });
 
-after(async function () {
-	await TestDatabase.cleanup(); // Clean up test data
-	await server.close(); // Close server
+after(function () {
+	chai.request(server).get('/');
 });
