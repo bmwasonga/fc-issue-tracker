@@ -59,26 +59,25 @@ module.exports = function (app) {
 			res.json(newIssue);
 		})
 		.put(function (req, res) {
-			let project = req.params.project;
+			const project = req.params.project;
 			const issueId = req.body._id;
 
 			if (!issueId) {
 				return res.status(400).json({ error: 'missing _id' });
 			}
 
-			const issueIndex = issues.findIndex(
+			// Locate the existing issue
+			const existingIssue = issues.find(
 				(issue) => issue._id === issueId && issue.project === project
 			);
 
-			if (issueIndex === -1) {
+			if (!existingIssue) {
 				return res
 					.status(400)
 					.json({ error: 'could not update', _id: issueId });
 			}
 
-			const existingIssue = issues[issueIndex];
-
-			// Fields that can be updated
+			// Fields to update and actual updates tracker
 			const updateFields = [
 				'issue_title',
 				'issue_text',
@@ -87,65 +86,33 @@ module.exports = function (app) {
 				'status_text',
 				'open',
 			];
-
-			// Check if any fields were sent for update
 			const updates = {};
 			let hasActualUpdates = false;
 
-			// Get only the fields that were explicitly sent in the request body
-			const updateRequest = {};
-			updateFields.forEach((field) => {
-				// Only include fields that were explicitly sent (even if they're empty strings)
+			// Process updates
+			for (const field of updateFields) {
 				if (req.body.hasOwnProperty(field)) {
-					updateRequest[field] = req.body[field];
-				}
-			});
+					const newValue = req.body[field];
+					const processedValue =
+						field === 'open' ? Boolean(newValue) : (newValue || '').trim();
 
-			// If no update fields were sent at all
-			if (Object.keys(updateRequest).length === 0) {
-				return res.status(400).json({
-					error: 'no update field(s) sent',
-					_id: issueId,
-				});
-			}
-
-			// Process each field that was sent in the request
-			for (const [field, newValue] of Object.entries(updateRequest)) {
-				// Handle required fields
-				if (['issue_title', 'issue_text', 'created_by'].includes(field)) {
-					// Check if required fields are empty or just whitespace
+					// Check for required field validity
 					if (
-						newValue === undefined ||
-						newValue === null ||
-						newValue.trim() === ''
+						['issue_title', 'issue_text', 'created_by'].includes(field) &&
+						(!processedValue || processedValue === '')
 					) {
 						return res.status(400).json({ error: 'required field(s) missing' });
 					}
-					const trimmedValue = newValue.trim();
-					if (trimmedValue !== existingIssue[field]) {
-						updates[field] = trimmedValue;
-						hasActualUpdates = true;
-					}
-				}
-				// Handle boolean field (open)
-				else if (field === 'open') {
-					const boolValue = Boolean(newValue);
-					if (boolValue !== existingIssue[field]) {
-						updates[field] = boolValue;
-						hasActualUpdates = true;
-					}
-				}
-				// Handle optional fields
-				else {
-					const trimmedValue = newValue?.trim() || '';
-					if (trimmedValue !== existingIssue[field]) {
-						updates[field] = trimmedValue;
+
+					// Track updates only if values differ
+					if (processedValue !== existingIssue[field]) {
+						updates[field] = processedValue;
 						hasActualUpdates = true;
 					}
 				}
 			}
 
-			// Check if any actual changes were found in the provided fields
+			// If no updates detected
 			if (!hasActualUpdates) {
 				return res.status(400).json({
 					error: 'no update field(s) sent',
@@ -153,70 +120,112 @@ module.exports = function (app) {
 				});
 			}
 
-			// // Get only the fields that can be updated from the request body
-			// const updateRequest = {};
-			// updateFields.forEach((field) => {
-			// 	if (req.body.hasOwnProperty(field)) {
-			// 		updateRequest[field] = req.body[field];
-			// 	}
-			// });
+			// Apply updates
+			const updatedIssue = { ...existingIssue, ...updates };
+			issues[issues.indexOf(existingIssue)] = updatedIssue;
 
-			// // If no update fields were sent
-			// if (Object.keys(updateRequest).length === 0) {
-			// 	return res.status(400).json({
-			// 		error: 'no update field(s) sent',
-			// 		_id: issueId,
-			// 	});
-			// }
-
-			// // Check for actual changes in values
-			// for (const [field, newValue] of Object.entries(updateRequest)) {
-			// 	if (['issue_title', 'issue_text', 'created_by'].includes(field)) {
-			// 		// Required fields validation
-			// 		if (!newValue || newValue.trim() === '') {
-			// 			return res.status(400).json({ error: 'required field(s) missing' });
-			// 		}
-			// 		const trimmedValue = newValue.trim();
-			// 		if (trimmedValue !== existingIssue[field]) {
-			// 			updates[field] = trimmedValue;
-			// 			hasActualUpdates = true;
-			// 		}
-			// 	} else if (field === 'open') {
-			// 		// Boolean field comparison
-			// 		if (newValue !== existingIssue[field]) {
-			// 			updates[field] = newValue;
-			// 			hasActualUpdates = true;
-			// 		}
-			// 	} else {
-			// 		// Optional string fields
-			// 		const trimmedValue = newValue?.trim() || '';
-			// 		if (trimmedValue !== existingIssue[field]) {
-			// 			updates[field] = trimmedValue;
-			// 			hasActualUpdates = true;
-			// 		}
-			// 	}
-			// }
-
-			// // If no actual changes were found and or absent fields were sent
-			// if (!hasActualUpdates || Object.keys(updates).length === 0) {
-			// 	return res.status(400).json({
-			// 		error: 'no update field(s) sent',
-			// 		_id: issueId,
-			// 	});
-			// }
-
-			// // Apply updates and set updated_on
-			// issues[issueIndex] = {
-			// 	...existingIssue,
-			// 	...updates,
-			// 	updated_on: new Date(),
-			// };
-
-			// return res.json({
-			// 	result: 'successfully updated',
-			// 	_id: issueId,
-			// });
+			// Respond with success
+			return res
+				.status(200)
+				.json({ result: 'successfully updated', _id: issueId });
 		})
+
+		// .put(function (req, res) {
+		// 	let project = req.params.project;
+		// 	const issueId = req.body._id;
+
+		// 	if (!issueId) {
+		// 		return res.status(400).json({ error: 'missing _id' });
+		// 	}
+
+		// 	const issueIndex = issues.findIndex(
+		// 		(issue) => issue._id === issueId && issue.project === project
+		// 	);
+
+		// 	if (issueIndex === -1) {
+		// 		return res
+		// 			.status(400)
+		// 			.json({ error: 'could not update', _id: issueId });
+		// 	}
+
+		// 	const existingIssue = issues[issueIndex];
+
+		// 	// Fields that can be updated
+		// 	const updateFields = [
+		// 		'issue_title',
+		// 		'issue_text',
+		// 		'created_by',
+		// 		'assigned_to',
+		// 		'status_text',
+		// 		'open',
+		// 	];
+
+		// 	// Check if any fields were sent for update
+		// 	const updates = {};
+		// 	let hasActualUpdates = false;
+
+		// 	// Get only the fields that were explicitly sent in the request body
+		// 	const updateRequest = {};
+		// 	updateFields.forEach((field) => {
+		// 		// Only include fields that were explicitly sent (even if they're empty strings)
+		// 		if (req.body.hasOwnProperty(field)) {
+		// 			updateRequest[field] = req.body[field];
+		// 		}
+		// 	});
+
+		// 	// If no update fields were sent at all
+		// 	if (Object.keys(updateRequest).length === 0) {
+		// 		return res.status(400).json({
+		// 			error: 'no update field(s) sent',
+		// 			_id: issueId,
+		// 		});
+		// 	}
+
+		// 	// Process each field that was sent in the request
+		// 	for (const [field, newValue] of Object.entries(updateRequest)) {
+		// 		// Handle required fields
+		// 		if (['issue_title', 'issue_text', 'created_by'].includes(field)) {
+		// 			// Check if required fields are empty or just whitespace
+		// 			if (
+		// 				newValue === undefined ||
+		// 				newValue === null ||
+		// 				newValue.trim() === ''
+		// 			) {
+		// 				return res.status(400).json({ error: 'required field(s) missing' });
+		// 			}
+		// 			const trimmedValue = newValue.trim();
+		// 			if (trimmedValue !== existingIssue[field]) {
+		// 				updates[field] = trimmedValue;
+		// 				hasActualUpdates = true;
+		// 			}
+		// 		}
+		// 		// Handle boolean field (open)
+		// 		else if (field === 'open') {
+		// 			const boolValue = Boolean(newValue);
+		// 			if (boolValue !== existingIssue[field]) {
+		// 				updates[field] = boolValue;
+		// 				hasActualUpdates = true;
+		// 			}
+		// 		}
+		// 		// Handle optional fields
+		// 		else {
+		// 			const trimmedValue = newValue?.trim() || '';
+		// 			if (trimmedValue !== existingIssue[field]) {
+		// 				updates[field] = trimmedValue;
+		// 				hasActualUpdates = true;
+		// 			}
+		// 		}
+		// 	}
+
+		// 	// Check if any actual changes were found in the provided fields
+		// 	if (!hasActualUpdates) {
+		// 		return res.status(400).json({
+		// 			error: 'no update field(s) sent',
+		// 			_id: issueId,
+		// 		});
+		// 	}
+
+		// })
 		.delete(function (req, res) {
 			const issueId = req.body._id;
 			const project = req.params.project;
