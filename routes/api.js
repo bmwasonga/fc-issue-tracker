@@ -8,22 +8,26 @@ module.exports = function (app) {
 		.get(async function (req, res) {
 			let project = req.params.project;
 			let query = req.query;
-			let filteredIssues = issues;
-			if (query) {
-				if (query.open) {
-					filteredIssues = filteredIssues.filter((issue) => issue.open);
-				}
-				if (query.assigned_to) {
-					filteredIssues = filteredIssues.filter(
-						(issue) => issue.assigned_to === query.assigned_to
-					);
-				}
-				if (query.created_by) {
-					filteredIssues = filteredIssues.filter(
-						(issue) => issue.created_by === query.created_by
-					);
-				}
+			let filteredIssues = [...issues];
+
+			filteredIssues = filteredIssues.filter(
+				(issue) => issue.project === project
+			);
+
+			if (Object.keys(query).length > 0) {
+				filteredIssues = filteredIssues.filter((issue) => {
+					return Object.entries(query).every(([key, value]) => {
+						if (key === 'open') {
+							return issue.open === (value === 'true');
+						}
+						if (key === '_id') {
+							return issue._id === value;
+						}
+						return issue[key] && issue[key].toString() === value.toString();
+					});
+				});
 			}
+
 			res.json(filteredIssues);
 		})
 		.post(function (req, res) {
@@ -32,23 +36,25 @@ module.exports = function (app) {
 			const requiredFields = ['issue_title', 'issue_text', 'created_by'];
 			if (
 				requiredFields.some(
-					(field) => !req.body.hasOwnProperty(field) || req.body[field] === ''
+					(field) => !req.body[field] || req.body[field].trim() === ''
 				)
 			) {
-				return res.status(404).json({ error: 'required field(s) missing' });
+				return res.status(400).json({ error: 'required field(s) missing' });
 			}
 
 			let newIssue = {
-				_id: (issues.length + 1).toString(),
-				issue_title: req.body.issue_title,
-				issue_text: req.body.issue_text,
+				_id: Date.now().toString(),
+				project: project,
+				issue_title: req.body.issue_title.trim(),
+				issue_text: req.body.issue_text.trim(),
 				created_on: new Date(),
 				updated_on: new Date(),
-				created_by: req.body.created_by,
-				assigned_to: req.body.assigned_to || '',
+				created_by: req.body.created_by.trim(),
+				assigned_to: req.body.assigned_to?.trim() || '',
 				open: true,
-				status_text: req.body.status_text || '',
+				status_text: req.body.status_text?.trim() || '',
 			};
+
 			issues.push(newIssue);
 			res.json(newIssue);
 		})
@@ -57,15 +63,22 @@ module.exports = function (app) {
 			const issueId = req.body._id;
 
 			if (!issueId) {
-				return res.status(400).json({ error: 'missing id' });
+				return res.status(400).json({ error: 'missing _id' });
 			}
 
-			const issue = issues.find((issue) => issue._id === issueId);
+			const issueIndex = issues.findIndex(
+				(issue) => issue._id === issueId && issue.project === project
+			);
 
-			if (!issue) {
-				return res.status(400).json({ error: 'issue not found' });
+			if (issueIndex === -1) {
+				return res
+					.status(400)
+					.json({ error: 'could not update', _id: issueId });
 			}
 
+			const existingIssue = issues[issueIndex];
+
+			// Fields that can be updated
 			const updateFields = [
 				'issue_title',
 				'issue_text',
@@ -75,50 +88,158 @@ module.exports = function (app) {
 				'open',
 			];
 
-			const fieldsToUpdate = updateFields.filter((field) =>
-				req.body.hasOwnProperty(field)
-			);
+			// Check if any fields were sent for update
+			const updates = {};
+			let hasActualUpdates = false;
 
-			if (!fieldsToUpdate.length) {
+			// Get only the fields that were explicitly sent in the request body
+			const updateRequest = {};
+			updateFields.forEach((field) => {
+				// Only include fields that were explicitly sent (even if they're empty strings)
+				if (req.body.hasOwnProperty(field)) {
+					updateRequest[field] = req.body[field];
+				}
+			});
+
+			// If no update fields were sent at all
+			if (Object.keys(updateRequest).length === 0) {
 				return res.status(400).json({
 					error: 'no update field(s) sent',
 					_id: issueId,
 				});
 			}
 
-			fieldsToUpdate.forEach((field) => (issue[field] = req.body[field]));
+			// Process each field that was sent in the request
+			for (const [field, newValue] of Object.entries(updateRequest)) {
+				// Handle required fields
+				if (['issue_title', 'issue_text', 'created_by'].includes(field)) {
+					// Check if required fields are empty or just whitespace
+					if (
+						newValue === undefined ||
+						newValue === null ||
+						newValue.trim() === ''
+					) {
+						return res.status(400).json({ error: 'required field(s) missing' });
+					}
+					const trimmedValue = newValue.trim();
+					if (trimmedValue !== existingIssue[field]) {
+						updates[field] = trimmedValue;
+						hasActualUpdates = true;
+					}
+				}
+				// Handle boolean field (open)
+				else if (field === 'open') {
+					const boolValue = Boolean(newValue);
+					if (boolValue !== existingIssue[field]) {
+						updates[field] = boolValue;
+						hasActualUpdates = true;
+					}
+				}
+				// Handle optional fields
+				else {
+					const trimmedValue = newValue?.trim() || '';
+					if (trimmedValue !== existingIssue[field]) {
+						updates[field] = trimmedValue;
+						hasActualUpdates = true;
+					}
+				}
+			}
 
-			return res.status(200).json({
-				result: 'successfully updated',
-				_id: issueId,
-			});
+			// Check if any actual changes were found in the provided fields
+			if (!hasActualUpdates) {
+				return res.status(400).json({
+					error: 'no update field(s) sent',
+					_id: issueId,
+				});
+			}
+
+			// // Get only the fields that can be updated from the request body
+			// const updateRequest = {};
+			// updateFields.forEach((field) => {
+			// 	if (req.body.hasOwnProperty(field)) {
+			// 		updateRequest[field] = req.body[field];
+			// 	}
+			// });
+
+			// // If no update fields were sent
+			// if (Object.keys(updateRequest).length === 0) {
+			// 	return res.status(400).json({
+			// 		error: 'no update field(s) sent',
+			// 		_id: issueId,
+			// 	});
+			// }
+
+			// // Check for actual changes in values
+			// for (const [field, newValue] of Object.entries(updateRequest)) {
+			// 	if (['issue_title', 'issue_text', 'created_by'].includes(field)) {
+			// 		// Required fields validation
+			// 		if (!newValue || newValue.trim() === '') {
+			// 			return res.status(400).json({ error: 'required field(s) missing' });
+			// 		}
+			// 		const trimmedValue = newValue.trim();
+			// 		if (trimmedValue !== existingIssue[field]) {
+			// 			updates[field] = trimmedValue;
+			// 			hasActualUpdates = true;
+			// 		}
+			// 	} else if (field === 'open') {
+			// 		// Boolean field comparison
+			// 		if (newValue !== existingIssue[field]) {
+			// 			updates[field] = newValue;
+			// 			hasActualUpdates = true;
+			// 		}
+			// 	} else {
+			// 		// Optional string fields
+			// 		const trimmedValue = newValue?.trim() || '';
+			// 		if (trimmedValue !== existingIssue[field]) {
+			// 			updates[field] = trimmedValue;
+			// 			hasActualUpdates = true;
+			// 		}
+			// 	}
+			// }
+
+			// // If no actual changes were found and or absent fields were sent
+			// if (!hasActualUpdates || Object.keys(updates).length === 0) {
+			// 	return res.status(400).json({
+			// 		error: 'no update field(s) sent',
+			// 		_id: issueId,
+			// 	});
+			// }
+
+			// // Apply updates and set updated_on
+			// issues[issueIndex] = {
+			// 	...existingIssue,
+			// 	...updates,
+			// 	updated_on: new Date(),
+			// };
+
+			// return res.json({
+			// 	result: 'successfully updated',
+			// 	_id: issueId,
+			// });
 		})
-
 		.delete(function (req, res) {
 			const issueId = req.body._id;
-			let project = req.params.project;
+			const project = req.params.project;
 
-			// First check if _id exists
 			if (!issueId) {
-				return res.status(400).json({ error: 'missing id' });
+				return res.status(400).json({ error: 'missing _id' });
 			}
 
-			try {
-				let issueIndex = issues.findIndex((issue) => issue._id === issueId);
+			const issueIndex = issues.findIndex(
+				(issue) => issue._id === issueId && issue.project === project
+			);
 
-				if (issueIndex === -1) {
-					return res.status(400).json({ error: 'invalid id', _id: issueId });
-				}
-
-				// Delete the issue
-				issues.splice(issueIndex, 1);
-				return res
-					.status(200)
-					.json({ result: 'successfully deleted', _id: issueId });
-			} catch (err) {
-				return res
-					.status(400)
-					.json({ error: 'could not delete', _id: issueId });
+			if (issueIndex === -1) {
+				return res.status(400).json({
+					error: 'could not delete',
+					_id: issueId,
+				});
 			}
+
+			issues.splice(issueIndex, 1);
+			return res.status(200).json({
+				result: 'successfully deleted',
+				_id: issueId,
+			});
 		});
 };
