@@ -269,15 +269,18 @@ suite('Functional Tests', function () {
 				.put(`/api/issues/${project}`)
 				.send({
 					_id: 'invalidId',
+					issue_text: 'New Issue Text',
 				})
 				.end((err, res) => {
 					if (err) return done(err);
 					assert.isObject(res.body);
+					assert.equal(res.body.error, 'could not update');
+					assert.equal(res.body._id, 'invalidId');
+					console.log(res.text);
 					assert.deepEqual(
 						res.text,
 						`{"error":"could not update","_id":"${res.body._id}"}`
 					);
-
 					done();
 				});
 		});
