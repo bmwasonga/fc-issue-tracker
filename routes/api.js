@@ -131,6 +131,7 @@ module.exports = function (app) {
 
 			res.status(200).json({ result: 'successfully updated', _id: issueId });
 		})
+
 		.delete(function (req, res) {
 			const issueId = req.body._id;
 			const project = req.params.project;
