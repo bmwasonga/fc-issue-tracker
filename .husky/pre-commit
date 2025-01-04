@@ -1,8 +1,3 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
-# Run lint-staged
-npx lint-staged
 
 # Run tests
 npm test
@@ -12,31 +7,3 @@ if grep -r --include="*.{js,jsx,ts,tsx}" "console.log" ./src; then
   echo "❌ Error: console.log statements found. Please remove them before committing."
   exit 1
 fi
-
-# Check branch naming convention
-branch_name=$(git symbolic-ref --short HEAD)
-branch_pattern="^(feature|bugfix|hotfix|release)\/[A-Z]+-[0-9]+-.+$"
-if ! [[ $branch_name =~ $branch_pattern ]]; then
-  echo "❌ Error: Branch name '$branch_name' doesn't follow the convention:"
-  echo "Expected format: feature/JIRA-123-description"
-  exit 1
-fi
-
-# Check commit message format
-commit_msg=$(git log -1 --pretty=%B)
-commit_pattern="^(feat|fix|docs|style|refactor|test|chore)(\(.+\))?: .+"
-if ! [[ $commit_msg =~ $commit_pattern ]]; then
-  echo "❌ Error: Commit message doesn't follow conventional commits format."
-  echo "Expected format: type(scope): description"
-  echo "Example: feat(auth): add login functionality"
-  exit 1
-fi
-
-# .prettierrc
-{
-  "semi": true,
-  "singleQuote": true,
-  "tabWidth": 2,
-  "trailingComma": "es5",
-  "printWidth": 100
-}

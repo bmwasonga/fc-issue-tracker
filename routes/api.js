@@ -126,11 +126,53 @@ module.exports = function (app) {
 				});
 			}
 
-			updates.updated_on = new Date(); // to update the time
-			issuesStore.update(issueId, updates);
+			try {
+				updates.updated_on = new Date(); // to update the time
+				issuesStore.update(issueId, updates);
 
-			res.status(200).json({ result: 'successfully updated', _id: issueId });
+				res.status(200).json({ result: 'successfully updated', _id: issueId });
+			} catch (err) {
+				console.error(err);
+				res.status(500).json({ error: 'an error occurred' });
+			}
 		})
+
+		// .put(function (req, res) {
+		// 	let project = req.params.project;
+		// 	const { _id, ...update } = req.body;
+
+		// 	if (!_id) {
+		// 		return res.status(200).json({ error: 'missing _id' });
+		// 	}
+
+		// 	if (Object.keys(update).length === 0) {
+		// 		return res
+		// 			.status(200)
+		// 			.json({ error: 'no update field(s) sent', _id: _id });
+		// 	}
+
+		// 	let issue = issuesStore.get();
+
+		// 	const issueIndex = issue.findIndex(
+		// 		(issue) => issue._id === _id && issue.project === project
+		// 	);
+
+		// 	if (issueIndex === -1) {
+		// 		return res.status(200).json({ error: 'could not update', _id: _id });
+		// 	}
+		// 	const updatedIssue = {
+		// 		...issue[issueIndex],
+		// 		...update,
+		// 		updated_on: new Date(),
+		// 	};
+
+		// 	issue[issueIndex] = updatedIssue;
+		// 	issuesStore.set(issue);
+
+		// 	// issue = { ...issue, ...update, updated_on: new Date() };
+		// 	console.log('Issue:', issue);
+		// 	res.json({ result: 'successfully updated', _id: _id });
+		// })
 
 		.delete(function (req, res) {
 			const issueId = req.body._id;
@@ -140,18 +182,23 @@ module.exports = function (app) {
 				return res.status(200).json({ error: 'missing _id' });
 			}
 
-			const issueExists = issuesStore
-				.get()
-				.some((issue) => issue._id === issueId && issue.project === project);
+			try {
+				const issueExists = issuesStore
+					.get()
+					.some((issue) => issue._id === issueId && issue.project === project);
 
-			if (!issueExists) {
-				return res.status(200).json({
-					error: 'could not delete',
-					_id: issueId,
-				});
+				if (!issueExists) {
+					return res.status(200).json({
+						error: 'could not delete',
+						_id: issueId,
+					});
+				}
+
+				issuesStore.remove(issueId);
+				res.status(200).json({ result: 'successfully deleted', _id: issueId });
+			} catch (err) {
+				console.error(err);
+				res.status(500).json({ error: 'an error occurred' });
 			}
-
-			issuesStore.remove(issueId);
-			res.status(200).json({ result: 'successfully deleted', _id: issueId });
 		});
 };

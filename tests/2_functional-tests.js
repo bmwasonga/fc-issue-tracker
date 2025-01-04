@@ -200,7 +200,7 @@ suite('Functional Tests', function () {
 					assert.equal(res.status, 200);
 					assert.propertyVal(res.body, 'result', 'successfully updated');
 					assert.propertyVal(res.body, '_id', issueId);
-					assert.equal(
+					assert.deepEqual(
 						res.text,
 						'{"result":"successfully updated","_id":"' + issueId + '"}'
 					);
@@ -268,15 +268,16 @@ suite('Functional Tests', function () {
 				.request(server)
 				.put(`/api/issues/${project}`)
 				.send({
-					_id: 'invalidId',
-					issue_text: 'New Issue Text',
+					_id: '5f665eb46e296g6b9b6a504d',
+					issue_text: 'New Invalid Text',
 				})
 				.end((err, res) => {
 					if (err) return done(err);
 					assert.isObject(res.body);
+					assert.equal(res.status, 200);
 					assert.equal(res.body.error, 'could not update');
-					assert.equal(res.body._id, 'invalidId');
-					console.log(res.text);
+					assert.equal(res.body._id, '5f665eb46e296g6b9b6a504d');
+					// console.log('.....', res.text);
 					assert.deepEqual(
 						res.text,
 						`{"error":"could not update","_id":"${res.body._id}"}`
@@ -344,7 +345,7 @@ suite('Functional Tests', function () {
 			chai
 				.request(server)
 				.delete(`/api/issues/${project}`)
-				.send({})
+				.send({ _id: '' })
 				.end((err, res) => {
 					if (err) return done(err);
 					assert.equal(res.status, 200);
